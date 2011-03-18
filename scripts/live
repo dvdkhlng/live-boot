@@ -1958,3 +1958,9 @@ mountroot ()
 	kill ${tailpid}
 	[ -w "${rootmnt}/var/log/" ] && cp live-boot.log "${rootmnt}/var/log/" 2>/dev/null
 }
+
+## Tell Emacs' how to handle indentation in this file:
+# Local Variables:
+# indent-tabs-mode : t
+# sh-basic-offset : 8
+# End:
