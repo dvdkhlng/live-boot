@@ -476,30 +476,6 @@ mount_images_in_directory ()
 	fi
 }
 
-# This function is supposed to return whether a block device has sub-devices
-# (i.e. partitions).  Sub-devices are then determined using subdevices() and
-# scanned.
-is_nice_device ()
-{
-	sysfs_path="${1#/sys}"
-
-	if /lib/udev/path_id "${sysfs_path}" | egrep -q "ID_PATH=(usb|pci-|platform-sata_mv|platform-orion-ehci|platform-mmc|platform-mxsdhci|)"
-	then
-		return 0
-	elif echo "${sysfs_path}" | grep -q '^/block/vd[a-z]$'
-	then
-		return 0
-	elif echo ${sysfs_path} | grep -q "^/block/dm-"
-	then
-		return 0
-	elif echo ${sysfs_path} | grep -q "^/block/mtdblock"
-	then
-		return 0
-	fi
-
-	return 1
-}
-
 copy_live_to ()
 {
 	copyfrom="${1}"
@@ -1735,8 +1711,8 @@ find_livefs ()
 			then
 				return 0
 			fi
-		elif is_nice_device "${sysblock}"
-		then
+		else
+			# check all partitions on device ${devname} 
 			for dev in $(subdevices "${sysblock}")
 			do
 				if check_dev "${dev}"
