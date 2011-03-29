@@ -1137,6 +1137,45 @@ try_snap ()
 	return 0
 }
 
+unionfs_fuse_mount()
+{
+	local rw_dir="${1}"
+	local ro_dir="${2}"
+	local unionmountpoint="${3}"
+
+	# With unionfs-fuse we need all source directories under a common
+	# "chroot" directory for unionfs-fuse to survive pivot_root.  This
+	# directory must not be part of the initrd, else fuse crashes when the
+	# initrd is later purged
+        local chroot="/dev/.initramfs/varrun/unionfs"
+	mkdir -p "${chroot}"
+
+	# We use a prefix to yield unique names of directories in chroot so
+	# that it works with multiple unionfs-fuse mounts (todo: this'd need
+	# testing).
+	local prefix="${rw_dir}"
+	local chroot_rw="${prefix}/rw" 
+	local chroot_ro="${prefix}/ro" 
+	mkdir -p "${chroot}${chroot_rw}"
+	mkdir -p "${chroot}${chroot_ro}"
+	mount -o bind "$rw_dir" "${chroot}${chroot_rw}"
+	mount -o bind "$ro_dir" "${chroot}${chroot_ro}"
+
+	unionmountopts="-o cow,noinitgroups,default_permissions,allow_other,use_ino,suid,nonempty,max_files=32768"
+	unionmountopts="${unionmountopts} -o chroot=${chroot}"
+
+	unionmountopts="${unionmountopts} ${chroot_rw}=RW:${chroot_ro}=RO"
+
+	( 
+		sysctl -w fs.file-max=391524 
+		ulimit -HSn 16384
+		unionfs-fuse ${unionmountopts} "${unionmountpoint}" 
+	) && ( 
+		mkdir -p /dev/.initramfs/varrun
+		pidof unionfs-fuse >> /dev/.initramfs/varrun/sendsigs.omit || true 
+	)
+}
+
 setup_unionfs ()
 {
 	image_directory="${1}"
@@ -1448,14 +1487,8 @@ setup_unionfs ()
 		# We don't handle spaces and other junk gracefully here, hopefully not needed.
 		case "${UNIONTYPE}" in
 			unionfs-fuse)
-				unionmountopts="-o cow -o noinitgroups -o default_permissions -o allow_other -o use_ino -o suid"
-				unionmountopts="${unionmountopts} ${unionrw}=RW:${unionro}=RO"
-				( sysctl -w fs.file-max=391524 ; ulimit -HSn 16384
-				unionfs-fuse ${unionmountopts} "${unionmountpoint}" ) && \
-					( mkdir -p /dev/.initramfs/varrun
-				pidof unionfs-fuse >> /dev/.initramfs/varrun/sendsigs.omit || true )
+				unionfs_fuse_mount "${unionrw}" "${unionro}" "${unionmountpoint}"  
 				;;
-
 			unionmount)
 				unionmountopts="-t ${cow_fstype} -o noatime,union,${cow_mountopt} ${cowdevice}"
 				mount_full $unionmountopts "${unionmountpoint}"
